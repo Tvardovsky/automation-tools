@@ -1,0 +1,6 @@
+lxml
+Pillow
+requests
+python-telegram-bot
+python-dotenv
+pandas
