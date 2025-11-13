@@ -4,6 +4,18 @@ import shutil
 import hashlib
 from datetime import datetime
 from PIL import Image
+import logging
+
+# Logging configuration
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
+
+# Constants for message sender / recipient
+MESSAGE_SENDER_PARTY_ID = ""
+MESSAGE_SENDER_NAME = ""
 
 def deep_copy_element(source_element, target_element):
     """Copy the content of source element to target element, preserving the structure."""
@@ -15,12 +27,13 @@ def deep_copy_element(source_element, target_element):
         if sub_element.tail and sub_element.tail.strip():
             new_sub_element.tail = sub_element.tail.strip()
 
+
 def update_message_recipient(root):
     """Update the MessageRecipient section with the new data."""
     for message_recipient_element in root.xpath('//MessageRecipient'):
         party_id_element = message_recipient_element.find('.//PartyId')
         if party_id_element is not None:
-            party_id_element.text = 'PADPIDA2021092801S'
+            party_id_element.text = MESSAGE_SENDER_PARTY_ID
             if 'Namespace' in party_id_element.attrib:
                 del party_id_element.attrib['Namespace']
         
@@ -28,7 +41,8 @@ def update_message_recipient(root):
         if party_name_element is not None:
             full_name_element = party_name_element.find('.//FullName')
             if full_name_element is not None:
-                full_name_element.text = 'BeatData.Pro, LLC'
+                full_name_element.text = MESSAGE_SENDER_NAME
+
 
 def update_icpn(root, ean_upc_code):
     """Update the ICPN section with new data."""
@@ -37,6 +51,7 @@ def update_icpn(root, ean_upc_code):
             icpn_element.set('IsEan', 'true')
             icpn_element.text = ean_upc_code
 
+
 def upscale_image(image_path):
     """Upscale image to 3000x3000 if it's smaller."""
     try:
@@ -44,9 +59,10 @@ def upscale_image(image_path):
             if img.width < 3000 or img.height < 3000:
                 img = img.resize((3000, 3000), Image.LANCZOS)
                 img.save(image_path)
-                print(f"Upscaled image saved at: {image_path}")
+                logger.info(f"Upscaled image saved at: {image_path}")
     except Exception as e:
-        print(f"Error upscaling image {image_path}: {e}")
+        logger.error(f"Error upscaling image {image_path}: {e}")
+
 
 def calculate_md5(file_path):
     """Calculate the MD5 hash of a file."""
@@ -55,6 +71,7 @@ def calculate_md5(file_path):
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
+
 
 def update_image_metadata_and_hash(root, resources_folder):
     """Update image metadata and hash for upscaled images."""
@@ -71,16 +88,17 @@ def update_image_metadata_and_hash(root, resources_folder):
                     if hash_sum_element is not None:
                         hash_sum_element.text = new_hash
 
+
 def convert_ddex_structure(input_xml_path, output_xml_path, resources_folder, ean_upc_code):
     """Convert the structure of the DDEX XML."""
     if not os.path.exists(input_xml_path) or os.path.getsize(input_xml_path) == 0:
-        print(f"Error: The file {input_xml_path} does not exist or is empty.")
+        logger.error(f"The file {input_xml_path} does not exist or is empty.")
         return None
 
     try:
         tree = etree.parse(input_xml_path)
     except etree.XMLSyntaxError as e:
-        print(f"Error parsing XML file {input_xml_path}: {e}")
+        logger.error(f"Error parsing XML file {input_xml_path}: {e}")
         return None
 
     root = tree.getroot()
@@ -110,7 +128,7 @@ def convert_ddex_structure(input_xml_path, output_xml_path, resources_folder, ea
                 new_element = etree.SubElement(new_root, section, source_element.attrib)
                 deep_copy_element(source_element, new_element)
             else:
-                print(f"Section {section} not found in input XML.")
+                logger.warning(f"Section {section} not found in input XML.")
 
     update_message_recipient(new_root)
     update_image_metadata_and_hash(new_root, resources_folder)
@@ -119,6 +137,7 @@ def convert_ddex_structure(input_xml_path, output_xml_path, resources_folder, ea
     new_tree = etree.ElementTree(new_root)
     new_tree.write(output_xml_path, encoding='utf-8', xml_declaration=True, pretty_print=True)
     return output_xml_path
+
 
 def copy_resources(src_folder, dst_folder):
     """Copy resource files from the source folder to the destination folder."""
@@ -131,6 +150,7 @@ def copy_resources(src_folder, dst_folder):
             shutil.copytree(s, d, False, None)
         else:
             shutil.copy2(s, d)
+
 
 def create_batch_complete_xml(output_folder, batch_folder, package_folders, xml_file_names, message_ids, icpns, hash_sums):
     """Create the BatchComplete XML file."""
@@ -154,17 +174,17 @@ def create_batch_complete_xml(output_folder, batch_folder, package_folders, xml_
     message_header = etree.SubElement(root, 'MessageHeader')
     message_sender = etree.SubElement(message_header, 'MessageSender')
     party_id = etree.SubElement(message_sender, 'PartyId')
-    party_id.text = 'PADPIDA2021092801S'
+    party_id.text = MESSAGE_SENDER_PARTY_ID
     party_name = etree.SubElement(message_sender, 'PartyName')
     full_name = etree.SubElement(party_name, 'FullName')
-    full_name.text = 'BeatData.Pro, LLC'
+    full_name.text = MESSAGE_SENDER_NAME
     
     message_recipient = etree.SubElement(message_header, 'MessageRecipient')
     party_id = etree.SubElement(message_recipient, 'PartyId')
-    party_id.text = 'PADPIDA2021092801S'
+    party_id.text = MESSAGE_SENDER_PARTY_ID
     party_name = etree.SubElement(message_recipient, 'PartyName')
     full_name = etree.SubElement(party_name, 'FullName')
-    full_name.text = 'BeatData.Pro, LLC'
+    full_name.text = MESSAGE_SENDER_NAME
     
     message_created_date_time = etree.SubElement(message_header, 'MessageCreatedDateTime')
     message_created_date_time.text = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
@@ -208,6 +228,7 @@ def create_batch_complete_xml(output_folder, batch_folder, package_folders, xml_
     new_tree = etree.ElementTree(root)
     new_tree.write(batch_complete_path, encoding='utf-8', xml_declaration=True, pretty_print=True)
 
+
 def main():
     input_folder = './INPUT'  # Default input folder path
     output_folder = './OUTPUT'  # Default output folder path
@@ -225,11 +246,13 @@ def main():
                 package_folder_path = os.path.join(batch_folder_path, package_folder)
                 if os.path.isdir(package_folder_path):
                     input_xml_path = os.path.join(package_folder_path, f"{package_folder}.xml")
-                    print(f"Processing XML file: {input_xml_path}")
+                    logger.info(f"Processing XML file: {input_xml_path}")
                     if os.path.exists(input_xml_path):
                         resources_folder = os.path.join(package_folder_path, 'resources')
                         if not os.path.exists(resources_folder):
-                            print(f"Error: The resources folder {resources_folder} does not exist. Skipping this package.")
+                            logger.error(
+                                f"The resources folder {resources_folder} does not exist. Skipping this package."
+                            )
                             continue
 
                         output_xml_path = os.path.join(output_folder, batch_folder, package_folder, f"{package_folder}.xml")
@@ -243,7 +266,7 @@ def main():
                             continue
                         
                         dst_resources = os.path.join(output_folder, batch_folder, package_folder, 'resources')
-                        print(f"Copying resources from {resources_folder} to {dst_resources}")
+                        logger.info(f"Copying resources from {resources_folder} to {dst_resources}")
                         copy_resources(resources_folder, dst_resources)
                         
                         hash_sum = calculate_md5(output_xml_path)
@@ -258,10 +281,11 @@ def main():
                         icpns.append(icpn)
                         hash_sums.append(hash_sum)
                     else:
-                        print(f"Error: The XML file {input_xml_path} does not exist.")
+                        logger.error(f"The XML file {input_xml_path} does not exist.")
             
             if package_folders:
                 create_batch_complete_xml(output_folder, batch_folder, package_folders, xml_file_names, message_ids, icpns, hash_sums)
+
 
 if __name__ == '__main__':
     main()
